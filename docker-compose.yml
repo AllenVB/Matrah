@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: matrah_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: matrah_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - matrah-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d matrah_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: matrah_backend
+    ports:
+      - "8080:8080"
+    environment:
+      # Veritabanı ayarları
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=matrah_db
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+      # Diğer servisler (Network içinden ai-service)
+      - AI_SERVICE_URL=http://ai-service:8000/analyze
+      - JWT_SECRET=404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      # GCP için local'de test yapacaksanız aşağıdaki adımı kullanmalısınız:
+      # - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - matrah-network
+    # GCP Credentials dosyasını monte etmek için:
+    # volumes:
+    #   - ./credentials.json:/app/credentials.json:ro
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: matrah_ai_service
+    ports:
+      - "8000:8000"
+    environment:
+      - GCP_PROJECT_ID=your-project-id
+      - GCP_LOCATION=us
+      - GCP_PROCESSOR_ID=your-processor-id
+      # - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+    networks:
+      - matrah-network
+    # volumes:
+    #   - ./credentials.json:/app/credentials.json:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: matrah_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - matrah-network
+
+networks:
+  matrah-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
