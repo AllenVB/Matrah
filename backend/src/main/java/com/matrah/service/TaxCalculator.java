@@ -15,11 +15,18 @@ public class TaxCalculator {
 
         // Örnek iş kuralları (Mevzuata göre güncellenebilir)
         return switch (category) {
-            case IT_SERVICES, OFFICE -> totalAmount.multiply(new BigDecimal("1.00")); // %100 düşülebilir
-            case FUEL, TRAVEL -> totalAmount.multiply(new BigDecimal("0.70")); // Binek araç için %70 gider
-                                                                               // gösterilebilir
-            case FOOD -> totalAmount.multiply(new BigDecimal("0.50")); // Temsil ağırlama için %50 (Örnektir)
-            case OTHER -> totalAmount.multiply(new BigDecimal("0.30"));
+            case IT_SERVICES, OFFICE, EDUCATION, RENT, UTILITY ->
+                totalAmount; // %100 indirilebilir
+            case FUEL, TRAVEL, VEHICLE_MAINTENANCE ->
+                totalAmount.multiply(new BigDecimal("0.70")); // %70 indirilebilir
+            case FOOD ->
+                totalAmount.multiply(new BigDecimal("0.50")); // Temsil ağırlama limit
+            case ENTERTAINMENT ->
+                BigDecimal.ZERO; // Tümüyle KKEG
+            case HEALTH ->
+                totalAmount; // Tamamı indirilebilir (belge şartıyla)
+            default ->
+                totalAmount.multiply(new BigDecimal("0.30"));
         };
     }
 

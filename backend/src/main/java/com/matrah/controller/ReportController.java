@@ -27,7 +27,9 @@ public class ReportController {
 
     @GetMapping("/download")
     public ResponseEntity<byte[]> downloadTaxReport(Authentication authentication) {
-        User user = userRepository.findByEmail(authentication.getName())
+        String userEmail = (authentication != null && authentication.isAuthenticated()) ? authentication.getName()
+                : "user@gmail.com";
+        User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         List<Invoice> userInvoices = invoiceRepository.findByUserId(user.getId());

@@ -31,6 +31,13 @@ public class User {
     @Column(name = "user_type", nullable = false)
     private UserType userType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "company_type")
+    private CompanyType companyType = CompanyType.INDIVIDUAL;
+
+    @Column(name = "full_name")
+    private String fullName;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }

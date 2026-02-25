@@ -64,24 +64,81 @@ class DocumentProcessor:
             print(f"Error processing document {gcs_uri}: {e}")
             return self._mock_analysis(gcs_uri)
 
+    def analyze_invoice_from_bytes(self, image_bytes: bytes) -> dict:
+        """
+        Doğrudan byte olarak gelen görüntü analiz edilir.
+        GCS yoksa mock döner.
+        """
+        if not self.client:
+            return self._mock_analysis("bytes://local")
+
+        name = self.client.processor_path(self.project_id, self.location, self.processor_id)
+
+        request = documentai.ProcessRequest(
+            name=name,
+            raw_document=documentai.RawDocument(
+                content=image_bytes,
+                mime_type="image/jpeg"
+            )
+        )
+
+        try:
+            result = self.client.process_document(request=request)
+            document = result.document
+
+            extracted_data = {
+                "total_amount": self._extract_field(document, "total_amount"),
+                "vat_amount":   self._extract_field(document, "total_tax_amount"),
+                "vendor_name":  self._extract_field(document, "supplier_name"),
+                "tax_rate":     None,
+                "category":     "OTHER",
+                "items":        self._extract_line_items(document),
+            }
+
+            if extracted_data["total_amount"] and extracted_data["vat_amount"]:
+                try:
+                    total = float(extracted_data["total_amount"])
+                    vat   = float(extracted_data["vat_amount"])
+                    if total > 0 and vat > 0:
+                        extracted_data["tax_rate"] = round((vat / (total - vat)) * 100, 2)
+                except ValueError:
+                    pass
+
+            return extracted_data
+
+        except Exception as e:
+            print(f"Error processing from bytes: {e}")
+            return self._mock_analysis("bytes://local")
+
     def _extract_field(self, document: documentai.Document, field_name: str) -> Optional[str]:
         """Helper to extract specific entities from Document AI parsing."""
         for entity in document.entities:
             if entity.type_ == field_name:
-                # Remove common currency symbols for numeric fields
                 val = entity.mention_text.strip()
                 if field_name in ["total_amount", "total_tax_amount"]:
-                     val = re.sub(r'[^\d.,]', '', val).replace(',', '.')
+                    val = re.sub(r'[^\d.,]', '', val).replace(',', '.')
                 return val
         return None
 
+    def _extract_line_items(self, document: documentai.Document) -> list:
+        """Satır kalemlerini (description) okur."""
+        items = []
+        for entity in document.entities:
+            if entity.type_ in ("line_item", "line_item/description"):
+                text = entity.mention_text.strip()
+                if text:
+                    items.append(text)
+        return items
+
     def _mock_analysis(self, gcs_uri: str) -> dict:
-        """Fallback mock data if GCP is not configured or fails"""
+        """Fallback mock data — GCS veya Document AI mevcut değilse kullanılır."""
         print(f"Using Mock Analysis for {gcs_uri}")
+        # Gerçekçi bir market fişi simüle ediliyor
         return {
-             "total_amount": "1200.00",
-             "vat_amount": "200.00",
-             "tax_rate": 20.0,
-             "vendor_name": "Mock Supplier AS",
-             "category": "OFFICE"
+            "total_amount": None,   # Geçersiz fiş tetiklemek için None bırak
+            "vat_amount":   None,
+            "tax_rate":     None,
+            "vendor_name":  None,
+            "category":     "OTHER",
+            "items":        []
         }
