@@ -33,26 +33,37 @@ export default function ManualInvoiceForm({ onSuccess }: ManualFormProps) {
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
 
+        const parseNum = (val: string) => {
+            if (!val) return null;
+            const normalized = val.replace(/\./g, '').replace(/,/g, '.');
+            const num = parseFloat(normalized);
+            return isNaN(num) ? null : num;
+        };
+
         if (!form.vendorName.trim() || form.vendorName.trim().length < 2) {
             newErrors.vendorName = 'Satıcı adı en az 2 karakter olmalıdır';
         }
         if (/^\d+$/.test(form.vendorName.trim())) {
             newErrors.vendorName = 'Satıcı adı yalnızca rakamdan oluşamaz';
         }
-        const amount = parseFloat(form.totalAmount);
-        if (!form.totalAmount || isNaN(amount) || amount < 1) {
+
+        const amount = parseNum(form.totalAmount) || 0;
+        if (!form.totalAmount || amount < 1) {
             newErrors.totalAmount = 'Toplam tutar en az 1 TL olmalıdır';
         }
-        const rate = parseFloat(form.taxRate);
-        if (isNaN(rate) || rate < 0 || rate > 100) {
+
+        const rate = parseNum(form.taxRate) || 0;
+        if (rate < 0 || rate > 100) {
             newErrors.taxRate = 'KDV oranı 0-100 arasında olmalıdır';
         }
+
         if (form.vatAmount) {
-            const vat = parseFloat(form.vatAmount);
-            if (!isNaN(vat) && !isNaN(amount) && vat > amount) {
+            const vat = parseNum(form.vatAmount);
+            if (vat !== null && vat > amount) {
                 newErrors.vatAmount = 'KDV tutarı toplam tutardan büyük olamaz';
             }
         }
+
         if (!form.invoiceDate) {
             newErrors.invoiceDate = 'Fatura tarihi zorunludur';
         } else if (new Date(form.invoiceDate) > new Date()) {
@@ -72,11 +83,18 @@ export default function ManualInvoiceForm({ onSuccess }: ManualFormProps) {
 
         setIsSubmitting(true);
         try {
+            const parseNum = (val: string) => {
+                if (!val) return null;
+                const normalized = val.replace(/\./g, '').replace(/,/g, '.');
+                const num = parseFloat(normalized);
+                return isNaN(num) ? null : num;
+            };
+
             await api.post('/invoices/manual', {
                 vendorName: form.vendorName.trim(),
-                totalAmount: parseFloat(form.totalAmount),
-                taxRate: parseFloat(form.taxRate),
-                vatAmount: form.vatAmount ? parseFloat(form.vatAmount) : null,
+                totalAmount: parseNum(form.totalAmount) || 0,
+                taxRate: parseNum(form.taxRate) || 0,
+                vatAmount: form.vatAmount ? parseNum(form.vatAmount) : null,
                 category: form.category,
                 invoiceDate: form.invoiceDate,
                 invoiceNumber: form.invoiceNumber || null,

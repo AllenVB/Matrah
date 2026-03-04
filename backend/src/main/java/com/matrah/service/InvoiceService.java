@@ -62,15 +62,29 @@ public class InvoiceService {
         try {
             var analysisResult = documentAIConnector.analyzeInvoice(imageUrl);
 
-            // AI anlamlı bir fatura verisi döndürmediyse faturayı REDDET
-            boolean isValidInvoice = analysisResult != null
-                    && analysisResult.getTotalAmount() != null
-                    && analysisResult.getTotalAmount().compareTo(java.math.BigDecimal.ONE) >= 0;
-
-            if (!isValidInvoice) {
-                savedInvoice.setStatus(InvoiceStatus.REJECTED);
+            // AI servisi tamamen cevap döndüremediyse
+            if (analysisResult == null) {
+                System.out
+                        .println("[WARN] AI servis yanıt döndürmedi — fatura PENDING olarak bırakılıyor: " + invoiceId);
+                savedInvoice.setStatus(InvoiceStatus.PENDING);
                 invoiceRepository.save(savedInvoice);
-                notificationService.notifyInvoiceUpdated(userId, invoiceId, "REJECTED");
+                notificationService.notifyInvoiceUpdated(userId, invoiceId, "PENDING");
+                return;
+            }
+
+            // AI anlamlı bir fatura verisi döndürmediyse faturayı kontrol et
+            boolean hasTotalAmount = analysisResult.getTotalAmount() != null
+                    && analysisResult.getTotalAmount().compareTo(java.math.BigDecimal.ONE) >= 0;
+            boolean hasVendorName = analysisResult.getVendorName() != null
+                    && !analysisResult.getVendorName().isBlank();
+            boolean hasFallbackWarning = analysisResult.getQualityWarning() != null
+                    && !analysisResult.getQualityWarning().isBlank();
+
+            if (!hasTotalAmount) {
+                // Tutar bile yoksa PENDING bırak — kullanıcı kontrol etsin
+                savedInvoice.setStatus(InvoiceStatus.PENDING);
+                invoiceRepository.save(savedInvoice);
+                notificationService.notifyInvoiceUpdated(userId, invoiceId, "PENDING");
                 return;
             }
 
@@ -97,12 +111,21 @@ public class InvoiceService {
             }
 
             savedInvoice.addDetail(detail);
-            savedInvoice.setStatus(InvoiceStatus.APPROVED);
+
+            // Fallback verisi ise veya satıcı adı eksikse → PENDING (kullanıcı doğrulamalı)
+            // Gerçek AI verisi ve satıcı adı varsa → APPROVED
+            if (hasFallbackWarning || !hasVendorName) {
+                savedInvoice.setStatus(InvoiceStatus.PENDING);
+            } else {
+                savedInvoice.setStatus(InvoiceStatus.APPROVED);
+            }
+
             invoiceRepository.save(savedInvoice);
 
         } catch (Exception e) {
             System.err.println("Fatura AI analizi sırasında hata oluştu: " + e.getMessage());
-            savedInvoice.setStatus(InvoiceStatus.REJECTED);
+            // Hata durumunda da PENDING bırak — kullanıcı manuel doğrulayabilir
+            savedInvoice.setStatus(InvoiceStatus.PENDING);
             invoiceRepository.save(savedInvoice);
         }
 
@@ -157,6 +180,15 @@ public class InvoiceService {
                 .stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Tekil fatura detayını döner.
+     */
+    public InvoiceDto getInvoiceById(Long invoiceId, String email) {
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Fatura bulunamadı"));
+        return mapToDto(invoice);
     }
 
     /**

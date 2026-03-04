@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "matrah",
+  "private_key_id": "5545f5d97da885364ec1eff873b1965a64f21bca",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDsHOMawnmXH3ax\nlsbLtUwtbs+0CbvbpyKtsHaOPgfrW7EpChIL0jQjxcbx77sGAfYBUGlvMsXdYXtL\nLbiTcBlA4BkzVFtUeIGV4uLAws4nKCUutRJZPJJg7uvJGMiKcHsLF3i8vRxbmdrc\nxezud8KmU8kbpCEhYPhp9mghkbpLnZdS2Y3x+3sU95DXAK+ilptEz04akuxYPXZB\nD2BPxXBvIb2T3040kH096Pq8ZQq9T1ZM/x2l12tnFXSLeqmjeDmstoUQT6VEs+Vw\nR2NJxtlqnthN+t2q64STM80Y87nAai3UFQq55JW9xxHLxrW1VGehnMtWB6NchC+r\neQrB4pyVAgMBAAECggEALnSekHDMGJpVsapPUdxJcTT4w90Ya6bOUWtDYEg/KaUg\nTclP9Kh2nsU2l/qJiyyOmQKXxAuy15Rq/EcyJjwrk9Kj0rAZyhxtrq512+RYSGcD\nLdXtlsYurMjFdoscRfTMmMmU9Vml/zXd1ItSyzagAza//mLEK/uW1M5o/ZXdGCw4\nToi3cNppOL1DhJAWvAnFOGp/ETwPmTz9jxai8SfibDrJ0vNEdZNninbUSS0ZDv6g\nOlcffQYBm04gz/Yfc3i9QTdj4LVnsWVqh0Mq9QtLL7y0aDeecZEMtvUz9yraUamI\n4ADxpUnNTpPA8WNzAh4V+GvUykJFxJW95ybpqtsavwKBgQD3wbqa9Dgb34l9n0e+\nQUAz50Rj5nQ7TlLD5iHGu9d19qTrOG6dLeXtR5CaOl4DCEeIgqc0VIOzzgN4W5Sr\n0bFSw7T3vd0NDE05J5TID+FgDUazDa/ZaQg0sG7o0Fyintoif6KykxalKHmstGM5\nuk3KK4Zsz+hjM09hSvmEuyyz/wKBgQDz9/sk3yHc4L7X9/N8F/WLL+zShheWXBad\n0z71afuWG/x88/PQtI4hQx75y84bDW8i88zhmgpRBN6kTdvHVHBB1G9ekLZYrGcI\nJvPwisOrRojutJV+Wi3BvrydR8UXTK/tmT4MJeb0BS9i00ODLRWaSNr0IzYIKs3l\na0CfHZifawKBgCnn5bVB65+jTrEl2M+wX7invGSdXTmOxOcHrNzddtMoFbsHf4Ys\ndkCNI0NC7hXbN6Y6Wye5x9EI3oNkEiCBxll2asygm5wSYZlyPXMdZISHmla80OqY\nHmAzG39bht+muMSvDAjiYikrUHFKzaG9Bl1UwVb0T50/14RgVxYBRs1nAoGBAIjb\np4r7kOdzPBuzAGewmRHHhLZken7ikd1fT4YkOfnvISiHQVLmtoR6ProqVihe1OVq\nlphH7Vmdvbe15YBgIckL/p2x2FjN/c5Y66cYcMN4AgDGVMZYmCqDcRNZ23pCjr5e\npKvz5yckcXyivtCrTd8K16j0x661NGNqUwnvdFqZAoGBAOuqgoG/JxlT/zMgT+0P\n6iEngVzi9dNehM8/QVQE50iimdtUcIHVWHvz9cZuEEBRwwPEDX4Fm9PH5TvOmJnL\nbrE8BpsyJJxJ/gZCw5gCE4+z/XrNj1TP848SX51VIB6efyJyCAYLUhLYxah/n3Zd\nrUUsrEwYnQsdslby6ZHFSn4e\n-----END PRIVATE KEY-----\n",
+  "client_email": "matrah-ai-servisi@matrah.iam.gserviceaccount.com",
+  "client_id": "116252189724338314423",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/matrah-ai-servisi%40matrah.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
