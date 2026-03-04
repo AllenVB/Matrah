@@ -42,7 +42,7 @@ public class InvoiceController {
                         Authentication authentication) throws IOException {
 
                 String userEmail = email(authentication);
-                InvoiceDto dto = invoiceService.uploadDocument(file, userEmail);
+                InvoiceDto dto = invoiceService.uploadAndProcessInvoice(file, userEmail);
                 return ResponseEntity.ok(dto);
         }
 
@@ -51,11 +51,15 @@ public class InvoiceController {
                         @Valid @RequestBody ManualInvoiceRequest request,
                         Authentication authentication) {
 
-                String userEmail = (authentication != null && authentication.isAuthenticated())
-                                ? authentication.getName()
-                                : "user@gmail.com";
+                String userEmail = email(authentication);
                 InvoiceDto dto = invoiceService.createManualInvoice(request, userEmail);
                 return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+        }
+
+        private String email(Authentication authentication) {
+                return (authentication != null && authentication.isAuthenticated())
+                                ? authentication.getName()
+                                : "user@gmail.com";
         }
 
         @GetMapping
@@ -64,6 +68,16 @@ public class InvoiceController {
                                 ? authentication.getName()
                                 : "user@gmail.com";
                 return ResponseEntity.ok(invoiceService.getUserInvoices(userEmail));
+        }
+
+        @GetMapping("/{id}")
+        public ResponseEntity<InvoiceDto> getInvoiceById(
+                        @PathVariable Long id,
+                        Authentication authentication) {
+                String userEmail = (authentication != null && authentication.isAuthenticated())
+                                ? authentication.getName()
+                                : "user@gmail.com";
+                return ResponseEntity.ok(invoiceService.getInvoiceById(id, userEmail));
         }
 
         @PutMapping("/{id}")

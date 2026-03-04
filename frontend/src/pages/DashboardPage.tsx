@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
-import api from '../api';
-import {
-    UploadCloud, FileText, CheckCircle, Clock, Download,
-    ClipboardList, Pencil, Trash2, XCircle
-} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import InvoiceForm from '../components/InvoiceForm';
-import InvoiceGuide from '../components/InvoiceGuide';
+import api from '../api';
+import AppLayout from '../components/AppLayout';
 
 interface Invoice {
     id: number;
@@ -21,36 +17,17 @@ interface Invoice {
     manual?: boolean;
 }
 
-const CATEGORY_MAP: Record<string, string> = {
-    FUEL: '⛽ Yakıt',
-    FOOD: '🍽️ Yiyecek',
-    OFFICE: '🖊️ Ofis',
-    TRAVEL: '✈️ Seyahat',
-    IT_SERVICES: '💻 BT',
-    VEHICLE_MAINTENANCE: '🔧 Araç Bakım',
-    ENTERTAINMENT: '🎭 Temsil',
-    HEALTH: '🏥 Sağlık',
-    EDUCATION: '📚 Eğitim',
-    RENT: '🏠 Kira',
-    UTILITY: '💡 Fatura',
-    OTHER: '📦 Diğer',
-};
-
-type Tab = 'upload' | 'manual';
-
 export default function DashboardPage() {
     const [invoices, setInvoices] = useState<Invoice[]>([]);
     const [isUploading, setIsUploading] = useState(false);
-    const [activeTab, setActiveTab] = useState<Tab>('upload');
-    const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
-    const [deletingId, setDeletingId] = useState<number | null>(null);
+    const navigate = useNavigate();
 
     const fetchInvoices = async () => {
         try {
             const res = await api.get('/invoices');
             setInvoices(res.data);
         } catch {
-            // sessizce geç
+            /* silent */
         }
     };
 
@@ -68,31 +45,43 @@ export default function DashboardPage() {
         setIsUploading(true);
         try {
             const res = await api.post('/invoices/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
             const result = res.data as Invoice;
-            if (result.status === 'REJECTED') {
-                toast.error('⚠️ Fatura tanınamadı! Lütfen geçerli bir fiş/fatura fotoğrafı yükleyin veya elle giriş yapın.');
-            } else {
-                toast.success('Fatura yüklendi! Yapay zeka analizi başlatıldı.');
-            }
+
+            // Fatura başlangıçta PENDING olarak gelir, AI arka planda çalışır
+            toast.info('📄 Fatura yüklendi! AI analizi başlatıldı — durum birkaç saniye içinde güncellenecek.', { autoClose: 4000 });
+
+            // AI analizi tamamlanana kadar birkaç kez poll yap
+            let attempts = 0;
+            const pollInterval = setInterval(async () => {
+                attempts++;
+                try {
+                    const pollRes = await api.get(`/invoices/${result.id ?? result}`);
+                    const updated = pollRes.data as Invoice;
+
+                    if (updated.status !== 'PENDING' || attempts >= 10) {
+                        clearInterval(pollInterval);
+                        if (updated.status === 'APPROVED') {
+                            toast.success(`✅ Fatura #${updated.id} AI tarafından onaylandı!`);
+                        } else if (updated.status === 'REJECTED') {
+                            toast.warning('⚠️ Fatura doğrulanamadı. Lütfen detayları kontrol edin veya geçerli bir belge yükleyin.');
+                        } else {
+                            toast.info('📋 AI analizi tamamlandı — lütfen fatura verilerini manuel olarak doğrulayın.');
+                        }
+                        fetchInvoices();
+                    }
+                } catch {
+                    clearInterval(pollInterval);
+                }
+            }, 2000);
+
             fetchInvoices();
         } catch {
-            toast.error('Dosya yüklenirken hata oluştu.');
+            toast.error('Dosya yüklenirken hata oluştu. Lütfen tekrar deneyin.');
         } finally {
             setIsUploading(false);
             e.target.value = '';
-        }
-    };
-
-    const handleDelete = async (id: number) => {
-        try {
-            await api.delete(`/invoices/${id}`);
-            toast.success('Fatura silindi.');
-            setDeletingId(null);
-            fetchInvoices();
-        } catch {
-            toast.error('Fatura silinemedi.');
         }
     };
 
@@ -111,190 +100,252 @@ export default function DashboardPage() {
         }
     };
 
+    // Stats
+    const pendingCount = invoices.filter((i) => i.status === 'PENDING').length;
+    const approvedCount = invoices.filter((i) => i.status === 'APPROVED').length;
+    const rejectedCount = invoices.filter((i) => i.status === 'REJECTED').length;
+    const totalVolume = invoices.reduce((sum, i) => sum + (i.totalAmount ?? 0), 0);
+    const totalVat = invoices.reduce((sum, i) => sum + (i.vatAmount ?? 0), 0);
+
+    // Recent 3
+    const recent = [...invoices].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+
     return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-            {/* Üst Menü */}
-            <nav className="bg-white shadow-sm border-b border-slate-200">
-                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-                    <h1 className="text-2xl font-bold text-primary-700 flex items-center gap-2">
-                        <FileText size={28} /> MATRAH
-                    </h1>
-                    <div className="flex items-center gap-3">
-                        <InvoiceGuide />
-                        <button
-                            onClick={downloadReport}
-                            className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-semibold transition-colors"
-                        >
-                            <Download size={16} /> Rapor İndir
+        <AppLayout>
+            <div className="p-8 space-y-8 animate-fadeIn">
+                {/* Title */}
+                <div className="flex items-end justify-between">
+                    <div>
+                        <h2 className="text-2xl font-extrabold tracking-tight">Genel Bakış</h2>
+                        <p className="text-slate-500 mt-1">Vergi belgelerinizin gerçek zamanlı durumu.</p>
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={downloadReport} className="btn-outline">
+                            <span className="material-symbols-outlined text-lg">download</span>
+                            Rapor İndir
                         </button>
                     </div>
                 </div>
-            </nav>
 
-            <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-
-                {/* Yükleme Sekmeli Bölümü */}
-                <div className="card bg-white">
-                    <div className="flex border-b border-slate-200">
-                        <button
-                            onClick={() => setActiveTab('upload')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-4 text-base font-semibold transition-colors ${activeTab === 'upload' ? 'text-primary-700 border-b-2 border-primary-500' : 'text-slate-500 hover:text-slate-800'}`}
-                        >
-                            <UploadCloud size={20} /> Fiş / Fatura Fotoğrafı Yükle
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('manual')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-4 text-base font-semibold transition-colors ${activeTab === 'manual' ? 'text-blue-600 border-b-2 border-blue-500' : 'text-slate-500 hover:text-slate-800'}`}
-                        >
-                            <ClipboardList size={20} /> Elle Giriş Yap
-                        </button>
+                {/* Stats Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="card p-6 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer" onClick={() => navigate('/invoices')}>
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
+                                <span className="material-symbols-outlined text-2xl">pending_actions</span>
+                            </div>
+                            {pendingCount > 0 && (
+                                <span className="text-amber-600 text-sm font-bold bg-amber-50 px-2 py-1 rounded">Aktif</span>
+                            )}
+                        </div>
+                        <p className="text-slate-500 text-sm font-medium">Bekleyen Faturalar</p>
+                        <h3 className="text-3xl font-bold mt-1">{pendingCount}</h3>
                     </div>
 
-                    <div className="p-8 sm:p-10">
-                        {activeTab === 'upload' ? (
-                            <div className="text-center border-2 border-dashed border-primary-200 hover:border-primary-400 rounded-xl p-8 transition-colors">
-                                <h2 className="text-2xl font-semibold text-slate-800 mb-3">Yeni Fiş / Fatura Yükle</h2>
-                                <p className="text-slate-500 text-base mb-6">
-                                    Geçerli bir fiş veya fatura fotoğrafı seçin. Rastgele fotoğraflar reddedilir.
-                                </p>
-                                <label className="btn-primary inline-flex cursor-pointer px-10 py-4 text-xl shadow-md w-full sm:w-auto">
-                                    <UploadCloud size={28} />
-                                    {isUploading ? 'Yükleniyor...' : 'Fotoğraf Seç veya Çek'}
+                    <div className="card p-6 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer" onClick={() => navigate('/invoices')}>
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
+                                <span className="material-symbols-outlined text-2xl">check_circle</span>
+                            </div>
+                            <span className="text-emerald-600 text-sm font-bold bg-emerald-50 px-2 py-1 rounded">Normal</span>
+                        </div>
+                        <p className="text-slate-500 text-sm font-medium">Onaylanan</p>
+                        <h3 className="text-3xl font-bold mt-1">{approvedCount}</h3>
+                    </div>
+
+                    <div className="card p-6 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer" onClick={() => navigate('/invoices')}>
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center">
+                                <span className="material-symbols-outlined text-2xl">error</span>
+                            </div>
+                            {rejectedCount > 0 && (
+                                <span className="text-rose-600 text-sm font-bold bg-rose-50 px-2 py-1 rounded">Dikkat</span>
+                            )}
+                        </div>
+                        <p className="text-slate-500 text-sm font-medium">Reddedilen</p>
+                        <h3 className="text-3xl font-bold mt-1">{rejectedCount}</h3>
+                    </div>
+                </div>
+
+                {/* Main Work Area */}
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                    {/* Upload + Recent */}
+                    <div className="xl:col-span-2 space-y-6">
+                        {/* Upload Dropzone */}
+                        <div className="card border-2 border-dashed border-slate-300 rounded-2xl p-12 text-center flex flex-col items-center justify-center group hover:border-primary/50 transition-all">
+                            <div className="w-20 h-20 bg-primary/5 text-primary rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                                <span className="material-symbols-outlined text-4xl">cloud_upload</span>
+                            </div>
+                            <h4 className="text-xl font-bold mb-2">Fatura Yükle & Analiz Et</h4>
+                            <p className="text-slate-500 max-w-sm mx-auto mb-8">
+                                PDF, görüntü veya XML faturanızı sürükleyin. AI tüm vergi verilerini otomatik çıkarır ve doğrular.
+                            </p>
+                            <div className="flex items-center gap-4">
+                                <label className="bg-primary text-white px-8 py-3 rounded-lg font-bold hover:bg-primary/90 transition-all cursor-pointer">
+                                    {isUploading ? 'Yükleniyor...' : 'Dosya Seç'}
                                     <input
                                         type="file"
-                                        accept="image/*"
-                                        capture="environment"
+                                        accept="image/*,.pdf,.xml"
                                         className="hidden"
                                         onChange={handleFileUpload}
                                         disabled={isUploading}
                                     />
                                 </label>
+                                <span className="text-slate-400 text-sm font-medium">veya dosyayı buraya bırakın</span>
                             </div>
-                        ) : (
-                            <InvoiceForm mode="create" onSuccess={fetchInvoices} />
-                        )}
-                    </div>
-                </div>
-
-                {/* Fatura Listesi */}
-                <div>
-                    <div className="flex justify-between items-end mb-4">
-                        <h3 className="text-2xl font-bold text-slate-800">Geçmiş Belgeler</h3>
-                        <button onClick={downloadReport} className="btn-outline text-primary-700 border-primary-300 hover:bg-primary-50">
-                            <Download size={20} />
-                            <span className="hidden sm:inline">Rapor (PDF) İndir</span>
-                            <span className="sm:hidden">PDF</span>
-                        </button>
-                    </div>
-
-                    {invoices.length === 0 ? (
-                        <div className="card p-8 text-center text-slate-500 text-lg bg-white opacity-80">
-                            Henüz yüklenmiş bir belgeniz bulunmuyor.
                         </div>
-                    ) : (
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            {invoices.map((inv) => (
-                                <div key={inv.id} className={`card flex flex-col bg-white hover:border-primary-300 transition-colors overflow-hidden ${inv.status === 'REJECTED' ? 'border-red-300 bg-red-50/30' : ''}`}>
-                                    {/* Görsel / İkon */}
-                                    {inv.manual ? (
-                                        <div className="h-28 bg-blue-50 flex flex-col items-center justify-center gap-1">
-                                            <ClipboardList size={32} className="text-blue-400" />
-                                            <span className="text-xs font-medium text-blue-600">Manuel Giriş</span>
-                                        </div>
-                                    ) : inv.status === 'REJECTED' ? (
-                                        <div className="h-28 bg-red-50 flex flex-col items-center justify-center gap-1">
-                                            <XCircle size={32} className="text-red-400" />
-                                            <span className="text-xs font-medium text-red-600">Geçersiz / Reddedildi</span>
-                                        </div>
-                                    ) : (
-                                        <div className="h-40 bg-slate-100 overflow-hidden">
-                                            <img src={inv.imageUrl} alt="Fatura" className="w-full h-full object-cover" />
-                                        </div>
-                                    )}
 
-                                    <div className="p-4 flex flex-col gap-1 flex-1">
-                                        {/* Durum */}
-                                        <div className="flex items-center gap-1.5 text-sm font-semibold mb-1">
-                                            {inv.status === 'APPROVED' ? (
-                                                <><CheckCircle size={15} className="text-green-600" /><span className="text-green-700">Kabul Edildi</span></>
-                                            ) : inv.status === 'PENDING' ? (
-                                                <><Clock size={15} className="text-amber-500 animate-pulse" /><span className="text-amber-700">İşleniyor...</span></>
-                                            ) : (
-                                                <><XCircle size={15} className="text-red-500" /><span className="text-red-600">Reddedildi – Düzenle</span></>
-                                            )}
+                        {/* Recent Documents */}
+                        <div className="card">
+                            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                                <h4 className="font-bold">Son Belgeler</h4>
+                                <button onClick={() => navigate('/invoices')} className="text-primary text-sm font-semibold hover:underline">
+                                    Tümünü Gör
+                                </button>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {recent.length === 0 ? (
+                                    <div className="px-6 py-8 text-center text-slate-400">Henüz belge yüklenmedi.</div>
+                                ) : (
+                                    recent.map((inv) => (
+                                        <div
+                                            key={inv.id}
+                                            onClick={() => navigate(`/invoice/${inv.id}`)}
+                                            className="px-6 py-4 flex items-center gap-4 hover:bg-slate-50 transition-colors cursor-pointer"
+                                        >
+                                            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
+                                                <span className="material-symbols-outlined">
+                                                    {inv.manual ? 'edit_document' : 'picture_as_pdf'}
+                                                </span>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold truncate">
+                                                    {inv.vendorName || `Fatura #${inv.id}`}
+                                                </p>
+                                                <p className="text-xs text-slate-500">
+                                                    {new Date(inv.createdAt).toLocaleDateString('tr-TR')}
+                                                    {inv.totalAmount != null && ` • ${inv.totalAmount.toFixed(2)} ₺`}
+                                                </p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span
+                                                    className={`inline-block px-2 py-1 rounded text-[10px] font-bold uppercase ${inv.status === 'APPROVED'
+                                                        ? 'bg-emerald-50 text-emerald-600'
+                                                        : inv.status === 'PENDING'
+                                                            ? 'bg-amber-50 text-amber-600'
+                                                            : 'bg-rose-50 text-rose-600'
+                                                        }`}
+                                                >
+                                                    {inv.status === 'APPROVED'
+                                                        ? 'Tamamlandı'
+                                                        : inv.status === 'PENDING'
+                                                            ? 'İşleniyor'
+                                                            : 'Hata'}
+                                                </span>
+                                            </div>
                                         </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
 
-                                        {inv.vendorName && <p className="font-semibold text-slate-800 text-base truncate">{inv.vendorName}</p>}
-                                        {inv.totalAmount != null && (
-                                            <p className="text-slate-600 text-sm">
-                                                <span className="font-bold text-slate-800">{inv.totalAmount.toFixed(2)} TL</span>
-                                                {inv.vatAmount != null && <> · KDV: {inv.vatAmount.toFixed(2)} TL</>}
-                                            </p>
-                                        )}
-                                        {inv.category && <span className="text-xs text-slate-400">{CATEGORY_MAP[inv.category] ?? inv.category}</span>}
-                                        <p className="text-slate-400 text-xs">{new Date(inv.createdAt).toLocaleDateString('tr-TR')}</p>
+                    {/* Side Stats */}
+                    <div className="space-y-6">
+                        {/* AI Insight Card */}
+                        <div className="bg-primary p-6 rounded-2xl text-white shadow-lg shadow-primary/20 relative overflow-hidden">
+                            <div className="absolute -right-4 -top-4 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                            <h4 className="text-lg font-bold mb-4">Vergi Analizi AI</h4>
+                            <p className="text-sm opacity-90 leading-relaxed mb-6">
+                                {approvedCount > 0
+                                    ? `Son ${approvedCount} onaylı faturanıza göre, toplam ${totalVat.toFixed(2)} ₺ KDV tespit edildi. İndirilebilirlik durumunuzu detay sayfasında inceleyebilirsiniz.`
+                                    : 'Fatura yükleyerek AI destekli vergi analizine hemen başlayın.'}
+                            </p>
+                            <button onClick={() => navigate('/invoices')} className="w-full bg-white text-primary font-bold py-2.5 rounded-lg text-sm hover:bg-slate-50 transition-colors">
+                                Detayları Görüntüle
+                            </button>
+                        </div>
 
-                                        {/* Aksiyon Butonları */}
-                                        <div className="flex gap-2 mt-2 pt-2 border-t border-slate-100">
-                                            <button
-                                                onClick={() => setEditingInvoice(inv)}
-                                                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium text-amber-600 hover:bg-amber-50 rounded-lg py-2 transition-colors border border-amber-200"
-                                            >
-                                                <Pencil size={14} /> Düzenle
-                                            </button>
-                                            <button
-                                                onClick={() => setDeletingId(inv.id)}
-                                                className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg py-2 transition-colors border border-red-200"
-                                            >
-                                                <Trash2 size={14} /> Sil
-                                            </button>
-                                        </div>
+                        {/* Volume Summary */}
+                        <div className="card p-6">
+                            <h4 className="font-bold mb-6">Toplam Özet</h4>
+                            <div className="space-y-4">
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs font-semibold">
+                                        <span className="text-slate-600 uppercase tracking-wider">Toplam Tutar</span>
+                                        <span>{totalVolume.toFixed(2)} ₺</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-primary rounded-full" style={{ width: '100%' }} />
                                     </div>
                                 </div>
-                            ))}
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs font-semibold">
+                                        <span className="text-slate-600 uppercase tracking-wider">Toplam KDV</span>
+                                        <span>{totalVat.toFixed(2)} ₺</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-emerald-500 rounded-full"
+                                            style={{ width: totalVolume > 0 ? `${(totalVat / totalVolume) * 100}%` : '0%' }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs font-semibold">
+                                        <span className="text-slate-600 uppercase tracking-wider">Toplam Fatura</span>
+                                        <span>{invoices.length}</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-amber-500 rounded-full" style={{ width: '100%' }} />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    )}
-                </div>
-            </main>
 
-            {/* Düzenleme Modalı */}
-            {editingInvoice && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-8">
-                        <InvoiceForm
-                            mode="edit"
-                            invoice={editingInvoice}
-                            onSuccess={fetchInvoices}
-                            onClose={() => setEditingInvoice(null)}
-                        />
+                        {/* Compliance Score */}
+                        <div className="bg-slate-900 rounded-2xl p-6 text-white bg-gradient-to-br from-slate-900 to-slate-800 border border-white/5 shadow-xl">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-primary">
+                                    <span className="material-symbols-outlined">verified_user</span>
+                                </div>
+                                <div>
+                                    <h5 className="font-bold">Uyumluluk Skoru</h5>
+                                    <p className="text-xs text-slate-400 leading-none mt-1">Güncel</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-center py-4">
+                                <div className="relative w-32 h-32 flex items-center justify-center">
+                                    <svg className="w-full h-full transform -rotate-90">
+                                        <circle className="text-slate-700" cx="64" cy="64" fill="transparent" r="58" stroke="currentColor" strokeWidth="8" />
+                                        <circle
+                                            className="text-primary"
+                                            cx="64"
+                                            cy="64"
+                                            fill="transparent"
+                                            r="58"
+                                            stroke="currentColor"
+                                            strokeDasharray="364.4"
+                                            strokeDashoffset={invoices.length > 0 ? 364.4 * (1 - approvedCount / Math.max(invoices.length, 1)) : 182}
+                                            strokeLinecap="round"
+                                            strokeWidth="8"
+                                        />
+                                    </svg>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                        <span className="text-3xl font-black">
+                                            {invoices.length > 0 ? Math.round((approvedCount / invoices.length) * 100) : 0}%
+                                        </span>
+                                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Güven</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <p className="text-center text-xs text-slate-400 mt-2 px-4">
+                                Faturalarınızın %{invoices.length > 0 ? Math.round((approvedCount / invoices.length) * 100) : 0}'i başarıyla doğrulandı.
+                            </p>
+                        </div>
                     </div>
                 </div>
-            )}
-
-            {/* Silme Onay Modalı */}
-            {deletingId !== null && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 text-center space-y-5">
-                        <Trash2 size={44} className="text-red-400 mx-auto" />
-                        <h3 className="text-xl font-bold text-slate-800">Faturayı Sil</h3>
-                        <p className="text-slate-500">Bu fatura kalıcı olarak silinecek. Emin misiniz?</p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setDeletingId(null)}
-                                className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-semibold transition-colors"
-                            >
-                                İptal
-                            </button>
-                            <button
-                                onClick={() => handleDelete(deletingId)}
-                                className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold transition-colors"
-                            >
-                                Evet, Sil
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+            </div>
+        </AppLayout>
     );
 }

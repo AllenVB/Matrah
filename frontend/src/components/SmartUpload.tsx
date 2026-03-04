@@ -131,6 +131,9 @@ export default function SmartUpload({ onUploadComplete, onUploadStart }: SmartUp
         setStatus('idle');
         setErrorMsg('');
         setProgress(0);
+        if (inputRef.current) {
+            inputRef.current.value = '';
+        }
     };
 
     return (

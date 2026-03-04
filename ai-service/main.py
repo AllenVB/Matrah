@@ -1,4 +1,5 @@
 import io
+import os
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
@@ -59,22 +60,51 @@ class AnalyzeResponse(BaseModel):
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_invoice(request: AnalyzeRequest):
     """
-    GCS URL üzerinden fatura analizi yapar.
+    GCS URL (gs:// veya https://storage.googleapis.com/) veya
+    yerel URL (/api/uploads/...) üzerinden fatura analizi yapar.
     Backend'ten çağrılır (dosya zaten kaydedilmiş durumda).
     """
-    gcs_uri = request.image_url
+    image_url = request.image_url
 
-    # URL dönüşümü (https → gs://)
+    # ── 1. Yerel dosya yolu (/api/uploads/...) ──────────────────
+    if image_url.startswith("/api/uploads/"):
+        filename = image_url.replace("/api/uploads/", "")
+        local_path = os.path.join("/tmp", "uploads", filename)
+
+        if not os.path.exists(local_path):
+            print(f"[ERROR] Yerel dosya bulunamadı: {local_path}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Yüklenen dosya bulunamadı: {filename}. "
+                       "Backend ve ai-service aynı volume'ü paylaşmalıdır."
+            )
+
+        ext = os.path.splitext(filename)[1].lower()
+        mime_type = "application/pdf" if ext == ".pdf" else "image/jpeg"
+        if ext in (".png", ".gif", ".webp", ".tiff", ".tif"):
+            mime_type = f"image/{ext.lstrip('.')}"
+
+        try:
+            with open(local_path, "rb") as f:
+                file_bytes = f.read()
+            data = processor.analyze_invoice_from_bytes(file_bytes, mime_type)
+            return _build_response(data)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Fatura analiz hatası: {str(e)}")
+
+    # ── 2. GCS URL dönüşümü (https → gs://) ────────────────────
+    gcs_uri = image_url
     if gcs_uri.startswith("https://storage.googleapis.com/"):
         parts = gcs_uri.replace("https://storage.googleapis.com/", "").split("/", 1)
         if len(parts) == 2:
             gcs_uri = f"gs://{parts[0]}/{parts[1]}"
 
+    # ── 3. GCS analizi ─────────────────────────────────────────
     try:
         data = processor.analyze_invoice_from_gcs(gcs_uri)
         return _build_response(data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Fatura analiz hatası: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"GCS fatura analiz hatası: {str(e)}")
 
 
 @app.post("/analyze-upload", response_model=AnalyzeResponse)
